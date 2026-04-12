@@ -64,7 +64,7 @@ if [[ ! -x "$APPIMAGE_TOOL" ]]; then
     chmod +x "$APPIMAGE_TOOL"
 fi
 
-ARCH=x86_64 "$APPIMAGE_TOOL" "$APPDIR" "$TMP_APPIMAGE"
+ARCH=x86_64 APPIMAGE_EXTRACT_AND_RUN=1 "$APPIMAGE_TOOL" "$APPDIR" "$TMP_APPIMAGE"
 cp "$TMP_APPIMAGE" "$DIST_DIR/Music-Compare-x86_64.AppImage"
 
 echo "AppImage created at: $DIST_DIR/Music-Compare-x86_64.AppImage"

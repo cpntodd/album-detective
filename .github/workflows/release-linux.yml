@@ -1,0 +1,68 @@
+name: Release Linux Builds
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag to build (for example: v1.0.1)"
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  build-linux:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Resolve tag and version
+        id: meta
+        shell: bash
+        run: |
+          if [[ "${{ github.event_name }}" == "release" ]]; then
+            TAG="${{ github.event.release.tag_name }}"
+          else
+            TAG="${{ inputs.tag }}"
+          fi
+          VERSION="${TAG#v}"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Install Linux packaging dependencies
+        shell: bash
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libfuse2 desktop-file-utils
+
+      - name: Build AppImage
+        shell: bash
+        run: |
+          bash scripts/linux/build_appimage.sh
+
+      - name: Build .deb package
+        shell: bash
+        run: |
+          bash scripts/linux/build_deb.sh "${{ steps.meta.outputs.version }}"
+
+      - name: Ensure release exists
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          gh release view "${{ steps.meta.outputs.tag }}" >/dev/null 2>&1 || \
+          gh release create "${{ steps.meta.outputs.tag }}" --title "${{ steps.meta.outputs.tag }}" --generate-notes
+
+      - name: Upload release assets
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.meta.outputs.tag }}
+          files: |
+            dist/linux/Music-Compare-x86_64.AppImage
+            dist/linux/album-detective_${{ steps.meta.outputs.version }}_amd64.deb
+          fail_on_unmatched_files: true
