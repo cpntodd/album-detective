@@ -1,0 +1,26 @@
+# Python cache
+__pycache__/
+*.py[cod]
+
+# Local virtual environments
+.venv/
+venv/
+
+# Runtime-generated app folders
+Config/
+Logs/
+Output/
+
+# Packaged artifacts
+/dist/
+
+# Build working files (keep spec file)
+/build/*
+!/build/compare.spec
+
+# AppImage extraction leftovers
+squashfs-root/
+
+# OS/editor noise
+.DS_Store
+Thumbs.db
