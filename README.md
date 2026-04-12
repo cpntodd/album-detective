@@ -1,14 +1,14 @@
-# Music Library vs Spotify (Python)
+# Album Detective
 
 ![Banner](images/banner.png)
 
-![Downloads](https://img.shields.io/github/downloads/cpntodd/compare/total)
-![GitHub stars](https://img.shields.io/github/stars/cpntodd/compare?style=flat-square)
-![GitHub watchers](https://img.shields.io/github/watchers/cpntodd/compare?style=flat-square)
+![Downloads](https://img.shields.io/github/downloads/cpntodd/album-detective/total)
+![GitHub stars](https://img.shields.io/github/stars/cpntodd/album-detective?style=flat-square)
+![GitHub watchers](https://img.shields.io/github/watchers/cpntodd/album-detective?style=flat-square)
 
-Local music scan and compare tool for music collectors.
+Local music library detective – Discover which albums you own across your collections.
 
-This desktop application compares your local library against your online collections on platforms like Spotify to help you identify missing discography.
+This desktop application helps music collectors identify their discography across local and online music libraries. Compare your physical collection against Spotify, Jellyfin, and other platforms to find gaps and overlaps.
 
 What it does:
 
