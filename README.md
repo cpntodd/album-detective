@@ -1,11 +1,15 @@
 # Music Library vs Spotify (Python)
 
-Desktop Python app that:
+Local music scan and compare tool for music collectors.
+
+This desktop application compares your local library against your online collections on platforms like Spotify to help you identify missing discography.
+
+What it does:
 
 - Scans a local music folder in read-only mode.
 - Extracts `Track name`, `Artist`, and `Album` from metadata (or folder structure fallback).
 - Cleans a Spotify library CSV to only those same fields.
-- Compares local vs Spotify and exports albums/artists that appear in Spotify but are not found locally.
+- Compares local vs Spotify and exports albums/artists found online but not owned locally.
 - Shows a UI with file explorer and Local vs Spotify tables.
 - Includes a Preferences dialog with persistent configuration.
 
