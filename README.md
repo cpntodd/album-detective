@@ -1,5 +1,7 @@
 # Music Library vs Spotify (Python)
 
+![Banner](images/banner.png)
+
 Local music scan and compare tool for music collectors.
 
 This desktop application compares your local library against your online collections on platforms like Spotify to help you identify missing discography.

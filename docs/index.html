@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Music Library vs Spotify - Local Music Comparison Tool</title>
+    <link rel="icon" type="image/png" href="../images/icon.png">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 800px;
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+            overflow: hidden;
+        }
+        
+        .header {
+            padding: 40px 30px;
+            text-align: center;
+            border-bottom: 2px solid #f0f0f0;
+        }
+        
+        .icon {
+            width: 80px;
+            height: 80px;
+            margin: 0 auto 20px;
+            background: #f5f5f5;
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .icon img {
+            width: 70px;
+            height: 70px;
+            object-fit: contain;
+        }
+        
+        h1 {
+            color: #667eea;
+            margin-bottom: 10px;
+            font-size: 2em;
+        }
+        
+        .subtitle {
+            color: #666;
+            font-size: 1.1em;
+        }
+        
+        .content {
+            padding: 40px 30px;
+        }
+        
+        .feature-list {
+            list-style: none;
+        }
+        
+        .feature-list li {
+            padding: 10px 0;
+            padding-left: 30px;
+            position: relative;
+            color: #555;
+        }
+        
+        .feature-list li:before {
+            content: "✓";
+            position: absolute;
+            left: 0;
+            color: #667eea;
+            font-weight: bold;
+            font-size: 1.2em;
+        }
+        
+        .cta-section {
+            text-align: center;
+            padding-top: 20px;
+            border-top: 2px solid #f0f0f0;
+            margin-top: 30px;
+        }
+        
+        .cta-button {
+            display: inline-block;
+            padding: 12px 30px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            text-decoration: none;
+            border-radius: 6px;
+            font-weight: 600;
+            transition: transform 0.2s, box-shadow 0.2s;
+            margin: 10px 5px;
+        }
+        
+        .cta-button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 20px rgba(102, 126, 234, 0.4);
+        }
+        
+        .footer {
+            text-align: center;
+            padding: 20px;
+            background: #f9f9f9;
+            color: #888;
+            font-size: 0.9em;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <div class="icon">
+                <img src="../images/icon.png" alt="App Icon">
+            </div>
+            <h1>Music Library vs Spotify</h1>
+            <p class="subtitle">Local music scan and compare tool for music collectors</p>
+        </div>
+        
+        <div class="content">
+            <p style="margin-bottom: 20px; color: #555;">
+                This desktop application compares your local music library against your online collections on platforms like Spotify to help you identify missing discography.
+            </p>
+            
+            <h2 style="color: #333; margin: 25px 0 15px 0; font-size: 1.3em;">What it does</h2>
+            <ul class="feature-list">
+                <li>Scans local music folder in read-only mode</li>
+                <li>Multi-threaded indexing for faster scans</li>
+                <li>Smart caching to avoid re-indexing unchanged files</li>
+                <li>Supports multiple scan profiles and worker configuration</li>
+                <li>Extracts metadata or uses folder structure fallback</li>
+                <li>Compares local library vs online platforms</li>
+                <li>Exports missing albums and artists</li>
+                <li>Interactive UI with file explorer and comparison tables</li>
+                <li>Supports Spotify API import and Jellyfin integration</li>
+                <li>Incremental NAS import with local caching</li>
+                <li>14 curated theme palettes</li>
+                <li>CSV viewer with sortable headers and search filtering</li>
+                <li>Artwork resolution via MusicBrainz and Cover Art Archive</li>
+            </ul>
+            
+            <div class="cta-section">
+                <h2 style="color: #333; margin-bottom: 20px; font-size: 1.2em;">Get Started</h2>
+                <a href="https://github.com/cpntodd/compare" class="cta-button">View on GitHub</a>
+                <a href="https://github.com/cpntodd/compare/releases" class="cta-button">Download</a>
+            </div>
+        </div>
+        
+        <div class="footer">
+            <p>Music Library vs Spotify – A tool for music collectors who want to stay organized.</p>
+        </div>
+    </div>
+</body>
+</html>
