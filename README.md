@@ -2,6 +2,10 @@
 
 ![Banner](images/banner.png)
 
+![Downloads](https://img.shields.io/github/downloads/cpntodd/compare/total)
+![GitHub stars](https://img.shields.io/github/stars/cpntodd/compare?style=flat-square)
+![GitHub watchers](https://img.shields.io/github/watchers/cpntodd/compare?style=flat-square)
+
 Local music scan and compare tool for music collectors.
 
 This desktop application compares your local library against your online collections on platforms like Spotify to help you identify missing discography.
