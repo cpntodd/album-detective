@@ -12,8 +12,10 @@ PYI_DIST_DIR="$TMP_BUILD_ROOT/pyinstaller-dist"
 PYI_WORK_DIR="$TMP_BUILD_ROOT/pyinstaller-work"
 APPDIR="$TMP_BUILD_ROOT/AppDir"
 APP_NAME="compare"
-DESKTOP_FILE="$APPDIR/${APP_NAME}.desktop"
-ICON_FILE="$APPDIR/${APP_NAME}.png"
+DESKTOP_ID="album-detective"
+DESKTOP_FILE="$APPDIR/${DESKTOP_ID}.desktop"
+ICON_FILE="$APPDIR/${DESKTOP_ID}.png"
+SOURCE_ICON="$ROOT_DIR/images/icon.png"
 APPIMAGE_TOOL="$TOOLS_DIR/appimagetool.AppImage"
 TMP_APPIMAGE="$TMP_BUILD_ROOT/Music-Compare-x86_64.AppImage"
 
@@ -43,17 +45,19 @@ chmod +x "$APPDIR/AppRun"
 cat > "$DESKTOP_FILE" << EOF
 [Desktop Entry]
 Type=Application
-Name=Music Compare
+Name=Album Detective
 Exec=compare
-Icon=compare
+Icon=album-detective
 Categories=AudioVideo;Utility;
 Terminal=false
 EOF
 
-# 1x1 transparent PNG placeholder icon in base64.
-base64 -d > "$ICON_FILE" << 'EOF'
-iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+iF9sAAAAASUVORK5CYII=
-EOF
+if [[ -f "$SOURCE_ICON" ]]; then
+    cp "$SOURCE_ICON" "$ICON_FILE"
+else
+    echo "Missing icon file: $SOURCE_ICON" >&2
+    exit 1
+fi
 
 if [[ ! -x "$APPIMAGE_TOOL" ]]; then
     curl -L "https://github.com/AppImage/AppImageKit/releases/download/continuous/appimagetool-x86_64.AppImage" -o "$APPIMAGE_TOOL"

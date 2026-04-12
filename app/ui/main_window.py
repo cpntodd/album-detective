@@ -271,7 +271,7 @@ class MusicCompareApp(tk.Tk):
         self.config_store = config_store
         self.logger = logger.getChild("ui")
 
-        self.title("Music Library vs Spotify")
+        self.title("Album Detective")
         self.geometry("1300x760")
         self.minsize(1000, 600)
 
@@ -931,8 +931,8 @@ class MusicCompareApp(tk.Tk):
     def show_about(self) -> None:
         messagebox.showinfo(
             "About",
-            "Music Library vs Spotify\n\n"
-            "Scans your local library read-only, cleans Spotify CSV, and exports albums/artists listened to on Spotify but not found locally.",
+            "Album Detective\n\n"
+            "Scans your local library read-only, compares against online collections, and exports albums/artists not found locally.",
         )
 
     def run_compare(self) -> None:
@@ -1057,16 +1057,16 @@ class MusicCompareApp(tk.Tk):
             )
 
             should_open = messagebox.askyesno(
-                "Open File Location",
-                "Do you want to open file location?",
+                "View CSV in New Window",
+                "Do you want to view CSV in a new window?",
             )
             if should_open:
                 try:
-                    open_in_file_explorer(output_dir)
-                    self.logger.info("Opened output folder in file explorer")
+                    self.after(0, self.open_csv_viewer)
+                    self.logger.info("Opened CSV viewer prompt")
                 except Exception as open_exc:
-                    self.logger.exception("Failed to open output folder")
-                    messagebox.showerror("Error", f"Could not open file location: {open_exc}")
+                    self.logger.exception("Failed to open CSV viewer")
+                    messagebox.showerror("Error", f"Could not open CSV viewer: {open_exc}")
         except ScanCancelled:
             self.after(0, self._update_progress, 0.0, "Job cancelled")
             self.logger.info("Compare job cancelled")
@@ -1154,16 +1154,16 @@ class MusicCompareApp(tk.Tk):
             )
 
             should_open = messagebox.askyesno(
-                "Open File Location",
-                "Do you want to open file location?",
+                "View CSV in New Window",
+                "Do you want to view CSV in a new window?",
             )
             if should_open:
                 try:
-                    open_in_file_explorer(output_dir)
-                    self.logger.info("Opened output folder in file explorer")
+                    self.after(0, self.open_csv_viewer)
+                    self.logger.info("Opened CSV viewer prompt")
                 except Exception as open_exc:
-                    self.logger.exception("Failed to open output folder")
-                    messagebox.showerror("Error", f"Could not open file location: {open_exc}")
+                    self.logger.exception("Failed to open CSV viewer")
+                    messagebox.showerror("Error", f"Could not open CSV viewer: {open_exc}")
         except ScanCancelled:
             self.after(0, self._set_status, "Job cancelled")
             self.logger.info("Jellyfin compare cancelled")
