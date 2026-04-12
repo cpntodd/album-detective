@@ -6,7 +6,7 @@
 ![GitHub stars](https://img.shields.io/github/stars/cpntodd/album-detective?style=flat-square)
 ![GitHub watchers](https://img.shields.io/github/watchers/cpntodd/album-detective?style=flat-square)
 
-Local music library detective – Discover which albums you own across your collections.
+Local music library detective – Discover which albums you don't own across your online collections.
 
 This desktop application helps music collectors identify their discography across local and online music libraries. Compare your physical collection against Spotify, Jellyfin, and other platforms to find gaps and overlaps.
 
