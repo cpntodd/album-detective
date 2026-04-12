@@ -7,11 +7,20 @@ This desktop application compares your local library against your online collect
 What it does:
 
 - Scans a local music folder in read-only mode.
+- Uses multi-threaded local indexing for faster scans.
+- Caches local index data to avoid re-indexing unchanged files.
+- Supports forced full re-index from Preferences when needed.
+- Supports scan profiles (`auto`, `local`, `network`) and optional max worker override for large collections.
 - Extracts `Track name`, `Artist`, and `Album` from metadata (or folder structure fallback).
 - Cleans a Spotify library CSV to only those same fields.
 - Compares local vs Spotify and exports albums/artists found online but not owned locally.
 - Shows a UI with file explorer and Local vs Spotify tables.
+- Shows compare progress with a progress bar and supports canceling the active job.
 - Includes a Preferences dialog with persistent configuration.
+- Supports Spotify API import (liked songs, saved albums, followed artists) into app-compatible CSV.
+- Supports Jellyfin API import for fast local-library ingestion.
+- Supports incremental NAS import with local cache to avoid re-reading unchanged files.
+- Includes a theme selector with 14 curated palettes for full UI styling.
 
 ## Runtime folder structure
 
@@ -54,6 +63,51 @@ pip install -r requirements.txt
 ```bash
 python main.py
 ```
+
+## Spotify API Import
+
+Use the app menu: `File -> Import From Spotify`.
+
+Before first import, open `Settings -> Preferences` and set:
+
+- Spotify Client ID
+- Spotify Client Secret
+- Spotify Redirect URI (default: `http://127.0.0.1:8888/callback`)
+
+Required Spotify app scopes used by this app:
+
+- `user-library-read`
+- `user-follow-read`
+
+Import output is written to:
+
+- `ROOT/Output/spotify_clean_tracks.csv`
+
+The imported CSV uses the same format as the compare pipeline:
+
+- `Track name,Artist,Album`
+
+## Jellyfin + NAS Import Alternatives
+
+Use menu: `File -> Import`
+
+- `From Jellyfin`
+  - Uses Jellyfin API key authentication.
+  - Fetches all audio items recursively for selected user.
+  - Normalizes to `Track name,Artist,Album` and writes to `ROOT/Output/local_music_tracks.csv`.
+- `From NAS (cached)`
+  - Traverses selected folder and computes a fast incremental fingerprint per file.
+  - Uses local cache directory: `ROOT/cache/`.
+  - Reuses cached metadata for unchanged files to speed up repeat imports.
+  - Normalizes and writes to `ROOT/Output/local_music_tracks.csv`.
+
+Both importers update the Local side in-app and keep comparison logic unchanged.
+
+## Theme Selector
+
+Use `Settings -> Preferences -> Theme` to choose from 14 palettes.
+
+Theme styling is applied across the app UI elements, including menu bars, buttons, labels, entry fields, comboboxes, tree views, tables, progress bars, and scrollbars.
 
 ## Packaging
 

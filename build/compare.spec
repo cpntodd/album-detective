@@ -2,7 +2,7 @@
 
 from PyInstaller.utils.hooks import collect_submodules
 
-hiddenimports = collect_submodules("mutagen")
+hiddenimports = collect_submodules("mutagen") + collect_submodules("app.ui")
 
 
 a = Analysis(

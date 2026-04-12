@@ -8,6 +8,8 @@ TOOLS_DIR="$ROOT_DIR/build/tools"
 DIST_DIR="$ROOT_DIR/dist/linux"
 VENV_DIR="${TMPDIR:-/tmp}/compare-packaging-venv"
 TMP_BUILD_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/compare-appimage-build-XXXXXX")"
+PYI_DIST_DIR="$TMP_BUILD_ROOT/pyinstaller-dist"
+PYI_WORK_DIR="$TMP_BUILD_ROOT/pyinstaller-work"
 APPDIR="$TMP_BUILD_ROOT/AppDir"
 APP_NAME="compare"
 DESKTOP_FILE="$APPDIR/${APP_NAME}.desktop"
@@ -25,10 +27,10 @@ mkdir -p "$TOOLS_DIR" "$DIST_DIR"
 python3 -m venv --copies "$VENV_DIR"
 "$VENV_DIR/bin/python" -m pip install --upgrade pip
 "$VENV_DIR/bin/python" -m pip install -r requirements.txt pyinstaller
-"$VENV_DIR/bin/python" -m PyInstaller --noconfirm --clean --distpath "$DIST_DIR" --workpath "$ROOT_DIR/build/pyi-linux" build/compare.spec
+"$VENV_DIR/bin/python" -m PyInstaller --noconfirm --clean --distpath "$PYI_DIST_DIR" --workpath "$PYI_WORK_DIR" build/compare.spec
 
 mkdir -p "$APPDIR/usr/bin"
-cp -r "$DIST_DIR/$APP_NAME" "$APPDIR/usr/bin/$APP_NAME"
+cp -r "$PYI_DIST_DIR/$APP_NAME" "$APPDIR/usr/bin/$APP_NAME"
 
 cat > "$APPDIR/AppRun" << 'EOF'
 #!/usr/bin/env bash
