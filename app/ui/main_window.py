@@ -275,6 +275,8 @@ class MusicCompareApp(tk.Tk):
         self.logger = logger.getChild("ui")
 
         self.title("Album Detective")
+        self._app_icon_image: tk.PhotoImage | None = None
+        self._apply_window_icon()
         self.geometry("1300x760")
         self.minsize(1000, 600)
 
@@ -316,6 +318,30 @@ class MusicCompareApp(tk.Tk):
         self._build_layout()
         self._apply_selected_theme()
         self.logger.info("UI initialized")
+
+    def _apply_window_icon(self) -> None:
+        """Apply a runtime window icon so Linux taskbars show the app icon."""
+        candidates = [
+            Path("/usr/share/icons/hicolor/512x512/apps/album-detective.png"),
+            Path("/usr/share/pixmaps/album-detective.png"),
+            Path(__file__).resolve().parents[2] / "images" / "icon.png",
+            self.paths.root_dir / "images" / "icon.png",
+        ]
+
+        for icon_path in candidates:
+            try:
+                if not icon_path.exists():
+                    continue
+                image = tk.PhotoImage(file=str(icon_path))
+                self.iconphoto(True, image)
+                # Keep a strong reference so Tk does not garbage-collect the icon.
+                self._app_icon_image = image
+                self.logger.info("Window icon loaded from %s", icon_path)
+                return
+            except Exception:
+                continue
+
+        self.logger.warning("Window icon not found; taskbar may show a generic icon.")
 
     def _build_menu(self) -> None:
         menu_bar = tk.Menu(self)
@@ -414,26 +440,17 @@ class MusicCompareApp(tk.Tk):
         content.add(left_panel, weight=2)
         content.add(right_panel, weight=3)
 
-        tools_notebook = ttk.Notebook(left_panel)
-        tools_notebook.pack(fill=tk.BOTH, expand=True)
-
         tool_entries = [
             ("CSV Viewer", self.open_csv_viewer),
             ("Genre Verifier", self.open_genre_verifier_tool),
         ]
-        grouped_tools: dict[str, list[tuple[str, Callable[[], None]]]] = {}
-        for label, command in sorted(tool_entries, key=lambda item: item[0].casefold()):
-            letter = label[0].upper() if label else "#"
-            grouped_tools.setdefault(letter, []).append((label, command))
-
         self._tool_buttons.clear()
-        for letter in sorted(grouped_tools.keys()):
-            tab = ttk.Frame(tools_notebook, padding=6)
-            tools_notebook.add(tab, text=letter)
-            for label, command in grouped_tools[letter]:
-                btn = ttk.Button(tab, text=label, command=command)
-                btn.pack(fill=tk.X, pady=4)
-                self._tool_buttons.append(btn)
+        tools_button_box = ttk.Frame(left_panel)
+        tools_button_box.pack(fill=tk.BOTH, expand=True)
+        for label, command in sorted(tool_entries, key=lambda item: item[0].casefold(), reverse=True):
+            btn = ttk.Button(tools_button_box, text=label, command=command)
+            btn.pack(fill=tk.X, pady=4)
+            self._tool_buttons.append(btn)
 
         top_headers = ttk.Frame(right_panel)
         top_headers.pack(fill=tk.X)
