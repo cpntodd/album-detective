@@ -7,29 +7,14 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable
 
-from mutagen import File as MutagenFile
-
+from .library_indexer import discover_audio_files, extract_audio_metadata
 from .models import TrackRecord
 from .normalization import clean_text
-
-AUDIO_EXTENSIONS = {
-    ".mp3",
-    ".flac",
-    ".m4a",
-    ".aac",
-    ".ogg",
-    ".opus",
-    ".wav",
-    ".wma",
-    ".aiff",
-    ".aif",
-    ".ape",
-    ".alac",
-}
 
 
 ProgressCallback = Callable[[int, int, str], None]
 CancelCallback = Callable[[], bool]
+DiagnosticCallback = Callable[[str], None]
 
 
 class ScanCancelled(Exception):
@@ -43,48 +28,9 @@ class FileCandidate:
     size: int
 
 
-def _first_tag(tags: dict, *keys: str) -> str:
-    for key in keys:
-        value = tags.get(key)
-        if value:
-            if isinstance(value, list):
-                return clean_text(value[0])
-            return clean_text(str(value))
-    return ""
-
-
-def _infer_from_path(path: Path) -> tuple[str, str]:
-    # Typical pattern: .../<Artist>/<Album>/<Track.ext>
-    parts = path.parts
-    if len(parts) >= 3:
-        album = clean_text(parts[-2])
-        artist = clean_text(parts[-3])
-        return artist, album
-    return "", ""
-
-
 def _extract_track_record(file_path: Path) -> TrackRecord:
-    track_name = clean_text(file_path.stem)
-    artist = ""
-    album = ""
-
-    try:
-        audio = MutagenFile(file_path, easy=True)
-        tags = audio.tags if audio else None
-        if tags:
-            artist = _first_tag(tags, "artist", "albumartist")
-            album = _first_tag(tags, "album")
-            track_name = _first_tag(tags, "title") or track_name
-    except Exception:
-        # Keep scanning even if a file has bad metadata.
-        pass
-
-    if not artist or not album:
-        inferred_artist, inferred_album = _infer_from_path(file_path)
-        artist = artist or inferred_artist
-        album = album or inferred_album
-
-    return TrackRecord(track_name=track_name, artist=artist, album=album)
+    metadata = extract_audio_metadata(file_path)
+    return TrackRecord(track_name=metadata.track_name, artist=metadata.artist, album=metadata.album)
 
 
 def _load_cache(cache_file: Path) -> dict:
@@ -157,33 +103,10 @@ def _select_workers(root: Path, scan_profile: str, requested_workers: int | None
     return min(24, max(4, cpu * 2))
 
 
-def _discover_audio_files(root: Path, should_cancel: CancelCallback | None = None) -> list[FileCandidate]:
-    files: list[FileCandidate] = []
-
-    # os.walk uses scandir internally and is usually faster/cheaper than rglob on large trees.
-    for dirpath, _, filenames in os.walk(root):
-        if should_cancel and should_cancel():
-            raise ScanCancelled("Scan cancelled by user.")
-
-        base = Path(dirpath)
-        for name in filenames:
-            if Path(name).suffix.lower() not in AUDIO_EXTENSIONS:
-                continue
-
-            file_path = base / name
-            try:
-                st = file_path.stat()
-            except OSError:
-                continue
-
-            files.append(FileCandidate(path=file_path, mtime_ns=st.st_mtime_ns, size=st.st_size))
-
-    return files
-
-
 def scan_music_folder(
     root_path: str,
     on_progress: ProgressCallback | None = None,
+    on_diagnostic: DiagnosticCallback | None = None,
     should_cancel: CancelCallback | None = None,
     cache_file: Path | None = None,
     use_cache: bool = True,
@@ -194,10 +117,21 @@ def scan_music_folder(
     if not root.exists() or not root.is_dir():
         raise FileNotFoundError(f"Music folder does not exist or is not a directory: {root_path}")
 
-    all_audio_files = _discover_audio_files(root, should_cancel=should_cancel)
+    all_audio_files = [
+        FileCandidate(path=item.path, mtime_ns=item.mtime_ns, size=item.size)
+        for item in discover_audio_files(
+            root,
+            should_cancel=should_cancel,
+            cancel_exception=ScanCancelled,
+            cancel_message="Scan cancelled by user.",
+        )
+    ]
     total_files = len(all_audio_files)
     if on_progress:
         on_progress(0, total_files, "Preparing scan...")
+    if on_diagnostic:
+        cache_state = "enabled" if (use_cache and cache_file is not None) else "disabled"
+        on_diagnostic(f"index mode: cache={cache_state}, profile={scan_profile}")
 
     cache_data = {"entries": {}}
     cache_entries: dict[str, dict] = {}
@@ -211,6 +145,7 @@ def scan_music_folder(
     fresh_cache_entries: dict[str, dict] = {}
     to_parse: list[FileCandidate] = []
     completed = 0
+    cached_hits = 0
 
     for candidate in all_audio_files:
         if should_cancel and should_cancel():
@@ -228,14 +163,20 @@ def scan_music_folder(
             records_by_path[path_key] = rec
             fresh_cache_entries[path_key] = entry
             completed += 1
+            cached_hits += 1
             if on_progress:
                 on_progress(completed, total_files, f"Cached: {candidate.path.name}")
             continue
 
         to_parse.append(candidate)
 
+    if on_diagnostic:
+        on_diagnostic(f"index pass: cached={cached_hits}, fresh={len(to_parse)}, total={total_files}")
+
     if to_parse:
         workers = _select_workers(root, scan_profile=scan_profile, requested_workers=max_workers)
+        if on_diagnostic:
+            on_diagnostic(f"index workers: {workers} threads")
         executor = ThreadPoolExecutor(max_workers=max(1, workers))
         cancelled = False
 
@@ -302,6 +243,8 @@ def scan_music_folder(
 
     if on_progress:
         on_progress(total_files, total_files, "Scan complete")
+    if on_diagnostic:
+        on_diagnostic(f"index done: cached={cached_hits}, parsed={len(to_parse)}")
 
     return records
 

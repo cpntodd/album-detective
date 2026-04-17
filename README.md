@@ -44,6 +44,7 @@ Then you can export that list and go hunting for those missing albums.
 - Compare source selection: Local or Jellyfin.
 - Progress + cancel support for long operations.
 - Persistent settings and theme selection.
+- Genre verification module (MusicBrainz) to suggest consistent album genre tags for local libraries.
 
 ## Screenshots
 
@@ -122,6 +123,24 @@ python main.py
 3. Review generated outputs in ROOT/Output.
 4. Open CSV Viewer to inspect missing albums with artwork.
 
+## Genre verification flow
+
+Use Tools -> Verify Genres (MusicBrainz).
+
+- Scans your local folder read-only and groups tracks by artist/album.
+- Reads existing local genre tags (if present).
+- Queries MusicBrainz release-group tags and picks a suggested canonical genre.
+- Exports actionable suggestions to:
+  - ROOT/Output/genre_tag_suggestions.csv
+
+`Action` values in the export:
+
+- add-genre: local metadata has no genre, suggestion found.
+- update-genre: local genre differs and MusicBrainz match confidence is high.
+- review: possible mismatch, manual review recommended.
+- keep: local genre already consistent.
+- no-match: no reliable MusicBrainz match found.
+
 ## Spotify API import
 
 Use File -> Import -> From Spotify.
@@ -171,7 +190,14 @@ Theme styling is applied across the app UI elements, including menu bars, button
 
 ### Build Linux AppImage (Debian)
 
+**System Requirements:** `python3-tk` must be installed before building.
+
 ```bash
+# Install tkinter (required for GUI bundling)
+sudo apt-get update
+sudo apt-get install -y python3-tk
+
+# Build the AppImage
 cd /media/share/Projects/album\ detective
 ./scripts/linux/build_appimage.sh
 ```
@@ -179,6 +205,8 @@ cd /media/share/Projects/album\ detective
 Artifacts:
 
 - dist/linux/Music-Compare-x86_64.AppImage
+
+**Troubleshooting:** If the AppImage fails with `ModuleNotFoundError: No module named 'tkinter'`, see [APPIMAGE_SETUP.md](APPIMAGE_SETUP.md) for detailed setup instructions.
 - dist/linux/compare/ (PyInstaller folder used for packaging)
 
 ### Build Windows EXE (Contributor workflow)
@@ -203,6 +231,7 @@ Generated in the selected output folder:
 - ROOT/Output/local_music_tracks.csv with columns: Track name, Artist, Album
 - ROOT/Output/spotify_clean_tracks.csv with columns: Track name, Artist, Album
 - ROOT/Output/spotify_not_owned_albums_artists.csv with columns: Artist, Album
+- ROOT/Output/genre_tag_suggestions.csv with columns: Artist, Album, Local Genre, Suggested Genre, Match Score, Confidence, Action
 
 ## Notes
 

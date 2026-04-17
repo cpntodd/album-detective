@@ -12,6 +12,9 @@ class JellyfinClient:
     """Client for lightweight Jellyfin music ingestion using API key auth."""
 
     def __init__(self, server_url: str, api_key: str, timeout: int = 20) -> None:
+        # Ensure server_url has a scheme (http:// or https://)
+        if not server_url.startswith(("http://", "https://")):
+            server_url = f"http://{server_url}"
         self.server_url = server_url.rstrip("/")
         self.timeout = timeout
         self.session = requests.Session()

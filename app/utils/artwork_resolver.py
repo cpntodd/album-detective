@@ -17,6 +17,7 @@ from urllib3.util.retry import Retry
 MUSICBRAINZ_SEARCH_URL: Final[str] = "https://musicbrainz.org/ws/2/release/"
 COVER_ART_ARCHIVE_URL: Final[str] = "https://coverartarchive.org/release/{mbid}/front-250"
 DEFAULT_USER_AGENT: Final[str] = "album-detective/1.0 ( https://github.com/cpntodd/album-detective )"
+MUSICBRAINZ_MIN_INTERVAL: Final[float] = 1.20
 
 
 @dataclass(frozen=True)
@@ -201,24 +202,29 @@ class ArtworkResolver:
         ]
 
         for query in queries:
-            response = self._throttled_get(
-                MUSICBRAINZ_SEARCH_URL,
-                params={
-                    "query": query,
-                    "fmt": "json",
-                    "limit": 5,
-                },
-            )
-            response.raise_for_status()
+            try:
+                response = self._throttled_get(
+                    MUSICBRAINZ_SEARCH_URL,
+                    params={
+                        "query": query,
+                        "fmt": "json",
+                        "limit": 5,
+                    },
+                    min_interval=max(self.min_request_interval, MUSICBRAINZ_MIN_INTERVAL),
+                )
+                response.raise_for_status()
 
-            payload = response.json()
-            releases = payload.get("releases")
-            if not isinstance(releases, list) or not releases:
+                payload = response.json()
+                releases = payload.get("releases")
+                if not isinstance(releases, list) or not releases:
+                    continue
+
+                best = self._pick_best_release(releases, artist, album)
+                if best:
+                    return best
+            except requests.exceptions.RequestException as exc:
+                self.logger.debug("MusicBrainz lookup failed for %s / %s: %s", artist, album, exc)
                 continue
-
-            best = self._pick_best_release(releases, artist, album)
-            if best:
-                return best
 
         return None
 
@@ -250,6 +256,7 @@ class ArtworkResolver:
     def _fetch_cover_art(self, mbid: str) -> bytes | None:
         response = self._throttled_get(
             COVER_ART_ARCHIVE_URL.format(mbid=mbid),
+            min_interval=self.min_request_interval,
         )
         if response.status_code == 404:
             return None
@@ -257,6 +264,7 @@ class ArtworkResolver:
         return response.content or None
 
     def _throttled_get(self, url: str, **kwargs: object) -> requests.Response:
+        min_interval = float(kwargs.pop("min_interval", self.min_request_interval))
         with self._request_lock:
             now = time.monotonic()
             wait_for = self._next_request_time - now
@@ -264,5 +272,5 @@ class ArtworkResolver:
                 time.sleep(wait_for)
 
             response = self.session.get(url, timeout=self.timeout, **kwargs)
-            self._next_request_time = time.monotonic() + self.min_request_interval
+            self._next_request_time = time.monotonic() + max(0.0, min_interval)
             return response

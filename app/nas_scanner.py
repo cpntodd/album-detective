@@ -2,41 +2,13 @@ from __future__ import annotations
 
 import hashlib
 import json
-import os
 from pathlib import Path
 from typing import Callable
 
-from mutagen import File as MutagenFile
-
+from .library_indexer import discover_audio_files, extract_audio_metadata
 
 ProgressCallback = Callable[[int, int, str], None]
 CancelCallback = Callable[[], bool]
-
-AUDIO_EXTENSIONS = {
-    ".mp3",
-    ".flac",
-    ".m4a",
-    ".aac",
-    ".ogg",
-    ".opus",
-    ".wav",
-    ".wma",
-    ".aiff",
-    ".aif",
-    ".ape",
-    ".alac",
-}
-
-
-def _first_tag(tags: dict, *keys: str) -> str:
-    for key in keys:
-        value = tags.get(key)
-        if not value:
-            continue
-        if isinstance(value, list):
-            return str(value[0]).strip()
-        return str(value).strip()
-    return ""
 
 
 def _fast_file_hash(path: Path, mtime_ns: int, size: int) -> str:
@@ -62,30 +34,12 @@ def _fast_file_hash(path: Path, mtime_ns: int, size: int) -> str:
 
 
 def _extract_metadata(path: Path) -> dict:
-    track_name = path.stem
-    artist = ""
-    album = ""
-
-    try:
-        audio = MutagenFile(path, easy=True)
-        tags = audio.tags if audio else None
-        if tags:
-            track_name = _first_tag(tags, "title") or track_name
-            artist = _first_tag(tags, "artist", "albumartist")
-            album = _first_tag(tags, "album")
-    except Exception:
-        pass
-
-    if not artist or not album:
-        parts = path.parts
-        if len(parts) >= 3:
-            artist = artist or parts[-3]
-            album = album or parts[-2]
+    metadata = extract_audio_metadata(path)
 
     return {
-        "Track name": track_name.strip(),
-        "Artist": artist.strip(),
-        "Album": album.strip(),
+        "Track name": metadata.track_name,
+        "Artist": metadata.artist,
+        "Album": metadata.album,
         "Path": str(path),
     }
 
@@ -102,14 +56,15 @@ def scan_nas_cached(
 
     cache_dir.mkdir(parents=True, exist_ok=True)
 
-    candidates: list[Path] = []
-    for dirpath, _, filenames in os.walk(root):
-        if should_cancel and should_cancel():
-            raise RuntimeError("Cancelled")
-        base = Path(dirpath)
-        for name in filenames:
-            if Path(name).suffix.lower() in AUDIO_EXTENSIONS:
-                candidates.append(base / name)
+    candidates = [
+        item.path
+        for item in discover_audio_files(
+            root,
+            should_cancel=should_cancel,
+            cancel_exception=RuntimeError,
+            cancel_message="Cancelled",
+        )
+    ]
 
     candidates.sort(key=lambda p: str(p).casefold())
     total = len(candidates)

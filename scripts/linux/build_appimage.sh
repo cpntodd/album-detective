@@ -26,7 +26,8 @@ trap cleanup EXIT
 
 mkdir -p "$TOOLS_DIR" "$DIST_DIR"
 
-python3 -m venv --copies "$VENV_DIR"
+# Create venv with --system-site-packages to include system tkinter
+python3 -m venv --copies --system-site-packages "$VENV_DIR"
 "$VENV_DIR/bin/python" -m pip install --upgrade pip
 "$VENV_DIR/bin/python" -m pip install -r requirements.txt pyinstaller
 "$VENV_DIR/bin/python" -m PyInstaller --noconfirm --clean --distpath "$PYI_DIST_DIR" --workpath "$PYI_WORK_DIR" build/compare.spec

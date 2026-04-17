@@ -2,10 +2,12 @@ from __future__ import annotations
 
 import logging
 import os
+import re
 import subprocess
 import sys
 import threading
 from pathlib import Path
+from typing import Callable
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
 
@@ -20,6 +22,7 @@ from ..scanner import ScanCancelled, load_cached_records_for_root, scan_music_fo
 from ..jellyfin_client import JellyfinClient
 from ..spotify_client import SpotifyClient
 from ..theme_manager import apply_theme, key_to_label, label_to_key, theme_labels
+from ..genre_verifier import GenreVerificationCancelled, verify_local_library_genres
 
 
 class SettingsDialog(tk.Toplevel):
@@ -301,8 +304,13 @@ class MusicCompareApp(tk.Tk):
         self._cancel_event = threading.Event()
         self._worker_thread: threading.Thread | None = None
         self._tree_node_paths: dict[str, Path] = {}
+        self._tool_buttons: list[ttk.Button] = []
         self._menus: list[tk.Menu] = []
         self._style = ttk.Style(self)
+        self._diag_cached_count = 0
+        self._diag_fresh_count = 0
+        self._diag_network_backoff_count = 0
+        self._diag_last_event = ""
 
         self._build_menu()
         self._build_layout()
@@ -313,6 +321,7 @@ class MusicCompareApp(tk.Tk):
         menu_bar = tk.Menu(self)
 
         file_menu = tk.Menu(menu_bar, tearoff=0)
+        file_menu.add_command(label="Run Scan", command=self.run_scan)
         file_menu.add_command(label="Run Compare", command=self.run_compare)
         file_menu.add_command(label="View CSV in New Window", command=self.open_csv_viewer)
         import_menu = tk.Menu(file_menu, tearoff=0)
@@ -332,16 +341,21 @@ class MusicCompareApp(tk.Tk):
         settings_menu.add_command(label="Select Local Folder", command=self.browse_local)
         settings_menu.add_command(label="Select Spotify CSV", command=self.browse_spotify)
 
+        tools_menu = tk.Menu(menu_bar, tearoff=0)
+        tools_menu.add_command(label="CSV Viewer", command=self.open_csv_viewer)
+        tools_menu.add_command(label="Genre Verifier", command=self.open_genre_verifier_tool)
+
         about_menu = tk.Menu(menu_bar, tearoff=0)
         about_menu.add_command(label="About", command=self.show_about)
 
         menu_bar.add_cascade(label="File", menu=file_menu)
         menu_bar.add_cascade(label="Edit", menu=edit_menu)
         menu_bar.add_cascade(label="Settings", menu=settings_menu)
+        menu_bar.add_cascade(label="Tools", menu=tools_menu)
         menu_bar.add_cascade(label="About", menu=about_menu)
 
         self.config(menu=menu_bar)
-        self._menus = [menu_bar, file_menu, import_menu, edit_menu, settings_menu, about_menu]
+        self._menus = [menu_bar, file_menu, import_menu, edit_menu, settings_menu, tools_menu, about_menu]
 
     def _apply_selected_theme(self) -> None:
         applied_key = apply_theme(
@@ -374,8 +388,17 @@ class MusicCompareApp(tk.Tk):
         button_row = ttk.Frame(controls)
         button_row.grid(row=3, column=1, sticky="e", pady=(6, 0))
 
-        self.scan_btn = ttk.Button(button_row, text="Scan + Compare", command=self.run_compare)
+        self.scan_btn = ttk.Button(button_row, text="Scan", command=self.run_scan)
         self.scan_btn.pack(side=tk.LEFT)
+
+        self.compare_btn = ttk.Button(button_row, text="Compare", command=self.run_compare)
+        self.compare_btn.pack(side=tk.LEFT, padx=(8, 0))
+
+        self.open_csv_btn = ttk.Button(button_row, text="Open CSV Viewer", command=self.open_csv_viewer)
+        self.open_csv_btn.pack(side=tk.LEFT, padx=(8, 0))
+
+        self.genre_btn = ttk.Button(button_row, text="Genre Verifier", command=self.open_genre_verifier_tool)
+        self.genre_btn.pack(side=tk.LEFT, padx=(8, 0))
 
         self.cancel_btn = ttk.Button(button_row, text="Cancel Job", command=self.cancel_compare, state=tk.DISABLED)
         self.cancel_btn.pack(side=tk.LEFT, padx=(8, 0))
@@ -385,18 +408,32 @@ class MusicCompareApp(tk.Tk):
         content = ttk.Panedwindow(root_frame, orient=tk.HORIZONTAL)
         content.pack(fill=tk.BOTH, expand=True)
 
-        left_panel = ttk.Labelframe(content, text="File Explorer", padding=6)
+        left_panel = ttk.Labelframe(content, text="Tools", padding=6)
         right_panel = ttk.Frame(content)
 
         content.add(left_panel, weight=2)
         content.add(right_panel, weight=3)
 
-        self.file_tree = ttk.Treeview(left_panel, show="tree")
-        tree_scroll = ttk.Scrollbar(left_panel, orient=tk.VERTICAL, command=self.file_tree.yview)
-        self.file_tree.configure(yscrollcommand=tree_scroll.set)
-        self.file_tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
-        tree_scroll.pack(side=tk.RIGHT, fill=tk.Y)
-        self._init_file_tree()
+        tools_notebook = ttk.Notebook(left_panel)
+        tools_notebook.pack(fill=tk.BOTH, expand=True)
+
+        tool_entries = [
+            ("CSV Viewer", self.open_csv_viewer),
+            ("Genre Verifier", self.open_genre_verifier_tool),
+        ]
+        grouped_tools: dict[str, list[tuple[str, Callable[[], None]]]] = {}
+        for label, command in sorted(tool_entries, key=lambda item: item[0].casefold()):
+            letter = label[0].upper() if label else "#"
+            grouped_tools.setdefault(letter, []).append((label, command))
+
+        self._tool_buttons.clear()
+        for letter in sorted(grouped_tools.keys()):
+            tab = ttk.Frame(tools_notebook, padding=6)
+            tools_notebook.add(tab, text=letter)
+            for label, command in grouped_tools[letter]:
+                btn = ttk.Button(tab, text=label, command=command)
+                btn.pack(fill=tk.X, pady=4)
+                self._tool_buttons.append(btn)
 
         top_headers = ttk.Frame(right_panel)
         top_headers.pack(fill=tk.X)
@@ -563,8 +600,71 @@ class MusicCompareApp(tk.Tk):
         return table
 
     def _set_status(self, value: str) -> None:
-        self.status_var.set(value)
+        self.status_var.set(self._status_with_diagnostics(value))
         self.update_idletasks()
+
+    def _reset_diagnostics(self) -> None:
+        self._diag_cached_count = 0
+        self._diag_fresh_count = 0
+        self._diag_network_backoff_count = 0
+        self._diag_last_event = ""
+
+    def _record_scan_diagnostic(self, message: str) -> None:
+        text = (message or "").strip().casefold()
+        if text.startswith("cached:"):
+            self._diag_cached_count += 1
+        elif text.startswith("scanning:"):
+            self._diag_fresh_count += 1
+
+    def _handle_scanner_diagnostic(self, event: str) -> None:
+        text = (event or "").strip().casefold()
+        if text.startswith("index pass:") or text.startswith("index done:"):
+            cached_match = re.search(r"cached=(\d+)", text)
+            fresh_match = re.search(r"(?:fresh|parsed)=(\d+)", text)
+            if cached_match:
+                self._diag_cached_count = int(cached_match.group(1))
+            if fresh_match:
+                self._diag_fresh_count = int(fresh_match.group(1))
+
+    def _record_network_backoff(self, event: str) -> None:
+        self._diag_network_backoff_count += 1
+        self._diag_last_event = event.strip()
+        current_base = self.status_var.get().split(" | diag ", 1)[0]
+        self.status_var.set(self._status_with_diagnostics(current_base))
+
+    def _status_with_diagnostics(self, value: str) -> str:
+        base = value.strip()
+        if self._diag_cached_count <= 0 and self._diag_fresh_count <= 0 and self._diag_network_backoff_count <= 0:
+            return base
+
+        diag = (
+            f"diag cache:{self._diag_cached_count} fresh:{self._diag_fresh_count} "
+            f"backoff:{self._diag_network_backoff_count}"
+        )
+        return f"{base} | {diag}"
+
+    def _show_info_threadsafe(self, title: str, message: str) -> None:
+        self.after(0, lambda: messagebox.showinfo(title, message, parent=self))
+
+    def _show_error_threadsafe(self, title: str, message: str) -> None:
+        self.after(0, lambda: messagebox.showerror(title, message, parent=self))
+
+    def _ask_yes_no_threadsafe(self, title: str, message: str) -> bool:
+        if threading.current_thread() is threading.main_thread():
+            return bool(messagebox.askyesno(title, message, parent=self))
+
+        done = threading.Event()
+        result = {"value": False}
+
+        def _ask() -> None:
+            try:
+                result["value"] = bool(messagebox.askyesno(title, message, parent=self))
+            finally:
+                done.set()
+
+        self.after(0, _ask)
+        done.wait()
+        return bool(result["value"])
 
     def browse_local(self) -> None:
         selected = filedialog.askdirectory(initialdir=self.local_path_var.get() or "/")
@@ -625,6 +725,47 @@ class MusicCompareApp(tk.Tk):
             str(cache_dir),
             "--jellyfin-base-url",
             self.jellyfin_server_url_var.get().strip(),
+        ]
+
+        if getattr(sys, "frozen", False):
+            return [sys.executable, *args]
+
+        project_root = Path(__file__).resolve().parents[2]
+        return [sys.executable, str(project_root / "main.py"), *args]
+
+    def open_genre_verifier_tool(self) -> None:
+        local_path = self.local_path_var.get().strip()
+        if not local_path:
+            selected = filedialog.askdirectory(
+                title="Select Music Folder for Genre Verifier",
+                initialdir=self.local_path_var.get() or "/",
+                parent=self,
+            )
+            if not selected:
+                return
+            local_path = selected
+            self.local_path_var.set(selected)
+
+        try:
+            command = self._genre_verifier_command(Path(local_path))
+            subprocess.Popen(command)
+            self.logger.info("Opened genre verifier tool for %s", local_path)
+        except Exception as exc:
+            self.logger.exception("Failed to open genre verifier tool")
+            messagebox.showerror("Genre Verifier", f"Could not open genre verifier tool: {exc}", parent=self)
+
+    def _genre_verifier_command(self, local_music_folder: Path) -> list[str]:
+        cache_dir = self.paths.root_dir / "cache"
+        cache_dir.mkdir(parents=True, exist_ok=True)
+
+        args = [
+            "--genre-tool",
+            "--local-music-folder",
+            str(local_music_folder),
+            "--output-dir",
+            str(self.paths.output_dir),
+            "--cache-dir",
+            str(cache_dir),
         ]
 
         if getattr(sys, "frozen", False):
@@ -732,10 +873,10 @@ class MusicCompareApp(tk.Tk):
                 self._load_preview_from_cache(selected_local)
 
             self.after(0, self._set_status, f"Spotify import complete. Rows exported: {len(tracks)}")
-            messagebox.showinfo("Spotify Import", f"Imported and exported to:\n{output_csv}")
+            self._show_info_threadsafe("Spotify Import", f"Imported and exported to:\n{output_csv}")
         except Exception as exc:
             self.logger.exception("Spotify import failed")
-            messagebox.showerror("Spotify Import Failed", str(exc))
+            self._show_error_threadsafe("Spotify Import Failed", str(exc))
         finally:
             self.after(0, self.progress_bar.stop)
             self.after(0, lambda: self.progress_bar.configure(mode="determinate"))
@@ -826,7 +967,7 @@ class MusicCompareApp(tk.Tk):
             self.after(0, self._set_status, f"Jellyfin import complete. Tracks: {len(records)}")
         except Exception as exc:
             self.logger.exception("Jellyfin import failed")
-            messagebox.showerror("Jellyfin Import Failed", str(exc))
+            self._show_error_threadsafe("Jellyfin Import Failed", str(exc))
         finally:
             self.after(0, self.progress_bar.stop)
             self.after(0, lambda: self.progress_bar.configure(mode="determinate"))
@@ -894,27 +1035,33 @@ class MusicCompareApp(tk.Tk):
                 self.after(0, self._update_progress, 0.0, "NAS cached import cancelled")
             else:
                 self.logger.exception("NAS cached import failed")
-                messagebox.showerror("NAS Import Failed", str(exc))
+                self._show_error_threadsafe("NAS Import Failed", str(exc))
         except Exception as exc:
             self.logger.exception("NAS cached import failed")
-            messagebox.showerror("NAS Import Failed", str(exc))
+            self._show_error_threadsafe("NAS Import Failed", str(exc))
         finally:
             self.after(0, self._set_running_state, False)
 
     def _set_running_state(self, running: bool) -> None:
         self.scan_btn.configure(state=tk.DISABLED if running else tk.NORMAL)
+        self.compare_btn.configure(state=tk.DISABLED if running else tk.NORMAL)
+        self.open_csv_btn.configure(state=tk.DISABLED if running else tk.NORMAL)
+        self.genre_btn.configure(state=tk.DISABLED if running else tk.NORMAL)
         self.cancel_btn.configure(state=tk.NORMAL if running else tk.DISABLED)
+        for tool_btn in self._tool_buttons:
+            tool_btn.configure(state=tk.DISABLED if running else tk.NORMAL)
 
     def _update_progress(self, value: float, status_text: str | None = None) -> None:
         bounded = max(0.0, min(100.0, value))
         self.progress_var.set(bounded)
         if status_text is not None:
-            self.status_var.set(status_text)
+            self.status_var.set(self._status_with_diagnostics(status_text))
         self.update_idletasks()
 
     def _scan_progress_callback(self, current: int, total: int, message: str) -> None:
         total_safe = max(total, 1)
         portion = (current / total_safe) * 80.0
+        self.after(0, self._record_scan_diagnostic, message)
         self.after(0, self._update_progress, portion, f"{message} ({current}/{total})")
 
     def cancel_compare(self) -> None:
@@ -935,11 +1082,182 @@ class MusicCompareApp(tk.Tk):
             "Scans your local library read-only, compares against online collections, and exports albums/artists not found locally.",
         )
 
-    def run_compare(self) -> None:
+    def verify_genres(self) -> None:
+        if self._worker_thread and self._worker_thread.is_alive():
+            messagebox.showinfo("Busy", "Another job is already running.")
+            return
+
+        local_path = self.local_path_var.get().strip()
+        if not local_path:
+            messagebox.showerror("Local Folder Required", "Select a local music folder before verifying genres.")
+            return
+
+        if not Path(local_path).exists():
+            messagebox.showerror("Local Folder Not Found", f"Local music folder not found:\n{local_path}")
+            return
+
+        self._persist_current_inputs()
+        self._cancel_event.clear()
+        self._reset_diagnostics()
+        self.progress_bar.configure(mode="determinate")
+        self._set_running_state(True)
+        self._update_progress(0.0, "Preparing genre verification...")
+
+        self._worker_thread = threading.Thread(
+            target=self._run_genre_verification_worker,
+            args=(local_path,),
+            daemon=True,
+        )
+        self._worker_thread.start()
+
+    def _run_genre_verification_worker(self, local_path: str) -> None:
+        try:
+            cache_dir = self.paths.root_dir / "cache"
+            cache_dir.mkdir(parents=True, exist_ok=True)
+
+            output_csv = self.paths.output_dir / "genre_tag_suggestions.csv"
+
+            def _progress(current: int, total: int, message: str) -> None:
+                total_safe = max(total, 1)
+                pct = (current / total_safe) * 100.0
+                self.after(0, self._update_progress, pct, f"{message} ({current}/{total})")
+
+            suggestions = verify_local_library_genres(
+                root_path=local_path,
+                output_csv=output_csv,
+                cache_file=cache_dir / "musicbrainz_genre_cache.json",
+                on_progress=_progress,
+                should_cancel=self._cancel_event.is_set,
+                on_diagnostic=lambda event: self.after(0, self._record_network_backoff, event),
+                logger=self.logger,
+            )
+
+            add_count = sum(1 for item in suggestions if item.action == "add-genre")
+            update_count = sum(1 for item in suggestions if item.action == "update-genre")
+            review_count = sum(1 for item in suggestions if item.action == "review")
+
+            self.after(
+                0,
+                self._update_progress,
+                100.0,
+                (
+                    "Genre verification complete. "
+                    f"Albums: {len(suggestions)} | Add: {add_count} | Update: {update_count} | Review: {review_count}"
+                ),
+            )
+
+            self.after(
+                0,
+                lambda: messagebox.showinfo(
+                    "Genre Verification Complete",
+                    "Genre suggestions exported to:\n"
+                    f"{output_csv}\n\n"
+                    f"Albums scanned: {len(suggestions)}\n"
+                    f"Add genre: {add_count}\n"
+                    f"Update genre: {update_count}\n"
+                    f"Manual review: {review_count}",
+                ),
+            )
+        except GenreVerificationCancelled:
+            self.after(0, self._update_progress, 0.0, "Genre verification cancelled")
+            self.logger.info("Genre verification cancelled")
+        except Exception as exc:
+            self.logger.exception("Genre verification failed")
+            self.after(0, lambda: messagebox.showerror("Genre Verification Failed", str(exc)))
+        finally:
+            self.after(0, self._set_running_state, False)
+
+    def run_scan(self) -> None:
         if self._worker_thread and self._worker_thread.is_alive():
             return
 
         CompareSourceDialog(self, self._start_compare_for_source)
+
+    def run_compare(self) -> None:
+        if self._worker_thread and self._worker_thread.is_alive():
+            return
+
+        if not self._tables_populated_for_compare():
+            self._set_status("Local/Spotify tables are empty. Starting scan first...")
+            self.run_scan()
+            return
+
+        if not self.local_tracks or not self.spotify_tracks:
+            self._show_error_threadsafe(
+                "Compare",
+                "Local and Spotify track data are not loaded yet. Run Scan first.",
+            )
+            return
+
+        self._persist_current_inputs()
+        self._cancel_event.clear()
+        self.progress_bar.configure(mode="determinate")
+        self._set_running_state(True)
+        self._update_progress(0.0, "Starting compare from loaded data...")
+
+        self._worker_thread = threading.Thread(target=self._run_compare_from_loaded_worker, daemon=True)
+        self._worker_thread.start()
+
+    def _tables_populated_for_compare(self) -> bool:
+        return bool(self.local_table.get_children()) and bool(self.spotify_table.get_children())
+
+    def _run_compare_from_loaded_worker(self) -> None:
+        try:
+            output_dir = self.paths.output_dir
+            output_dir.mkdir(parents=True, exist_ok=True)
+
+            self.after(0, self._update_progress, 20.0, "Preparing loaded local/spotify data...")
+            self.local_pairs = unique_album_artist(self.local_tracks)
+            self.spotify_pairs = unique_album_artist(self.spotify_tracks)
+
+            if self._cancel_event.is_set():
+                raise ScanCancelled("Compare job cancelled.")
+
+            self.after(0, self._update_progress, 70.0, "Comparing local library vs Spotify...")
+            self.missing_pairs = spotify_not_owned(self.local_tracks, self.spotify_tracks)
+
+            local_csv = output_dir / "local_music_tracks.csv"
+            spotify_clean_csv = output_dir / "spotify_clean_tracks.csv"
+            missing_csv = output_dir / "spotify_not_owned_albums_artists.csv"
+
+            write_track_csv(local_csv, self.local_tracks)
+            write_track_csv(spotify_clean_csv, self.spotify_tracks)
+            write_album_artist_csv(missing_csv, self.missing_pairs)
+
+            self.after(0, self._refresh_tables)
+            self.after(
+                0,
+                self._update_progress,
+                100.0,
+                f"Done. Local tracks: {len(self.local_tracks)} | Spotify tracks: {len(self.spotify_tracks)} | Missing albums/artists: {len(self.missing_pairs)}",
+            )
+
+            self._show_info_threadsafe(
+                "Completed",
+                "Export complete.\n\n"
+                f"- {local_csv}\n"
+                f"- {spotify_clean_csv}\n"
+                f"- {missing_csv}",
+            )
+
+            should_open = self._ask_yes_no_threadsafe(
+                "View CSV in New Window",
+                "Do you want to view CSV in a new window?",
+            )
+            if should_open:
+                try:
+                    self.after(0, self.open_csv_viewer)
+                except Exception as open_exc:
+                    self.logger.exception("Failed to open CSV viewer")
+                    self._show_error_threadsafe("Error", f"Could not open CSV viewer: {open_exc}")
+        except ScanCancelled:
+            self.after(0, self._update_progress, 0.0, "Job cancelled")
+            self.logger.info("Loaded-data compare cancelled")
+        except Exception as exc:
+            self.logger.exception("Loaded-data compare failed")
+            self._show_error_threadsafe("Error", str(exc))
+        finally:
+            self.after(0, self._set_running_state, False)
 
     def _start_compare_for_source(self, source: str) -> None:
         if source == "Local":
@@ -952,6 +1270,7 @@ class MusicCompareApp(tk.Tk):
     def _start_local_compare(self) -> None:
         self._persist_current_inputs()
         self._cancel_event.clear()
+        self._reset_diagnostics()
         self.progress_bar.configure(mode="determinate")
         self._set_running_state(True)
         self._update_progress(0.0, "Starting compare job...")
@@ -999,6 +1318,7 @@ class MusicCompareApp(tk.Tk):
             self.local_tracks = scan_music_folder(
                 local_path,
                 on_progress=self._scan_progress_callback,
+                on_diagnostic=lambda event: self.after(0, self._handle_scanner_diagnostic, event),
                 should_cancel=self._cancel_event.is_set,
                 cache_file=self.paths.config_dir / "local_index_cache.json",
                 use_cache=not self.force_reindex_var.get(),
@@ -1048,7 +1368,7 @@ class MusicCompareApp(tk.Tk):
                 len(self.missing_pairs),
             )
 
-            messagebox.showinfo(
+            self._show_info_threadsafe(
                 "Completed",
                 "Export complete.\n\n"
                 f"- {local_csv}\n"
@@ -1056,7 +1376,7 @@ class MusicCompareApp(tk.Tk):
                 f"- {missing_csv}",
             )
 
-            should_open = messagebox.askyesno(
+            should_open = self._ask_yes_no_threadsafe(
                 "View CSV in New Window",
                 "Do you want to view CSV in a new window?",
             )
@@ -1066,14 +1386,14 @@ class MusicCompareApp(tk.Tk):
                     self.logger.info("Opened CSV viewer prompt")
                 except Exception as open_exc:
                     self.logger.exception("Failed to open CSV viewer")
-                    messagebox.showerror("Error", f"Could not open CSV viewer: {open_exc}")
+                    self._show_error_threadsafe("Error", f"Could not open CSV viewer: {open_exc}")
         except ScanCancelled:
             self.after(0, self._update_progress, 0.0, "Job cancelled")
             self.logger.info("Compare job cancelled")
         except Exception as exc:
             self._set_status("Failed")
             self.logger.exception("Compare run failed")
-            messagebox.showerror("Error", str(exc))
+            self._show_error_threadsafe("Error", str(exc))
         finally:
             self.after(0, self._set_running_state, False)
 
@@ -1145,7 +1465,7 @@ class MusicCompareApp(tk.Tk):
                 len(self.missing_pairs),
             )
 
-            messagebox.showinfo(
+            self._show_info_threadsafe(
                 "Completed",
                 "Export complete.\n\n"
                 f"- {local_csv}\n"
@@ -1153,7 +1473,7 @@ class MusicCompareApp(tk.Tk):
                 f"- {missing_csv}",
             )
 
-            should_open = messagebox.askyesno(
+            should_open = self._ask_yes_no_threadsafe(
                 "View CSV in New Window",
                 "Do you want to view CSV in a new window?",
             )
@@ -1163,13 +1483,13 @@ class MusicCompareApp(tk.Tk):
                     self.logger.info("Opened CSV viewer prompt")
                 except Exception as open_exc:
                     self.logger.exception("Failed to open CSV viewer")
-                    messagebox.showerror("Error", f"Could not open CSV viewer: {open_exc}")
+                    self._show_error_threadsafe("Error", f"Could not open CSV viewer: {open_exc}")
         except ScanCancelled:
             self.after(0, self._set_status, "Job cancelled")
             self.logger.info("Jellyfin compare cancelled")
         except Exception as exc:
             self.logger.exception("Jellyfin compare failed")
-            messagebox.showerror("Error", str(exc))
+            self._show_error_threadsafe("Error", str(exc))
         finally:
             self.after(0, self.progress_bar.stop)
             self.after(0, lambda: self.progress_bar.configure(mode="determinate"))

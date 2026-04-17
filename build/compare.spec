@@ -2,7 +2,12 @@
 
 from PyInstaller.utils.hooks import collect_submodules
 
-hiddenimports = collect_submodules("mutagen") + collect_submodules("app.ui")
+hiddenimports = (
+    collect_submodules("mutagen")
+    + collect_submodules("app.ui")
+    + collect_submodules("app.genre_verifier")
+    + ["tkinter", "requests", "spotipy", "PySide6", "pandas", "openpyxl"]
+)
 
 
 a = Analysis(

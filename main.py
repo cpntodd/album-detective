@@ -11,6 +11,8 @@ from app.ui import run_app
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
     parser.add_argument("--view-csv", dest="view_csv", default="")
+    parser.add_argument("--genre-tool", dest="genre_tool", action="store_true")
+    parser.add_argument("--local-music-folder", dest="local_music_folder", default="")
     parser.add_argument("--output-dir", dest="output_dir", default="")
     parser.add_argument("--cache-dir", dest="cache_dir", default="")
     parser.add_argument("--jellyfin-base-url", dest="jellyfin_base_url", default="")
@@ -33,6 +35,18 @@ def main() -> int:
             output_dir=output_dir,
             cache_dir=cache_dir,
             jellyfin_base_url=args.jellyfin_base_url,
+        )
+
+    if args.genre_tool:
+        from app.ui.genre_verifier_window import run_genre_verifier_tool
+
+        output_dir = Path(args.output_dir).expanduser() if args.output_dir else runtime_paths.output_dir
+        cache_dir = Path(args.cache_dir).expanduser() if args.cache_dir else (runtime_paths.root_dir / "cache")
+        cache_dir.mkdir(parents=True, exist_ok=True)
+        return run_genre_verifier_tool(
+            local_music_folder=args.local_music_folder,
+            output_dir=output_dir,
+            cache_dir=cache_dir,
         )
 
     config_store = ConfigStore(runtime_paths.config_dir / "settings.json", logger)
