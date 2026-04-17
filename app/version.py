@@ -4,13 +4,18 @@ Update VERSION for each release:
 - Increment PATCH (0.0.X) for each major codebase update
 """
 
-__version__ = "0.0.4"
+__version__ = "0.0.5"
 __title__ = "Album Detective"
 __description__ = "Desktop app for collectors to cross-reference local music against Spotify and Jellyfin data"
 __author__ = "cpntodd"
 __license__ = "MIT"
 
 # Version history:
+# 0.0.5 (April 17, 2026):
+#   - Replaced static About popup with dynamic GitHub-backed About dialog
+#   - Added clickable developer profile and repository links
+#   - Added live avatar/profile/repo metadata with offline fallback
+#
 # 0.0.4 (April 17, 2026):
 #   - Added StartupWMClass to Debian desktop entry for panel pinning compatibility
 #   - Removed AppImage scripts/docs/workflow references

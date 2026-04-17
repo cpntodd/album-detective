@@ -6,10 +6,14 @@ import re
 import subprocess
 import sys
 import threading
+import json
+import webbrowser
 from pathlib import Path
 from typing import Callable
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
+from urllib.error import URLError, HTTPError
+from urllib.request import Request, urlopen, urlretrieve
 
 from ..compare import spotify_not_owned, unique_album_artist
 from ..config_store import AppConfig, ConfigStore
@@ -23,6 +27,12 @@ from ..jellyfin_client import JellyfinClient
 from ..spotify_client import SpotifyClient
 from ..theme_manager import apply_theme, key_to_label, label_to_key, theme_labels
 from ..genre_verifier import GenreVerificationCancelled, verify_local_library_genres
+
+
+GITHUB_PROFILE_URL = "https://github.com/cpntodd"
+GITHUB_REPO_URL = "https://github.com/cpntodd/album-detective"
+GITHUB_PROFILE_API = "https://api.github.com/users/cpntodd"
+GITHUB_REPO_API = "https://api.github.com/repos/cpntodd/album-detective"
 
 
 class SettingsDialog(tk.Toplevel):
@@ -1093,11 +1103,168 @@ class MusicCompareApp(tk.Tk):
                 table.delete(item)
 
     def show_about(self) -> None:
-        messagebox.showinfo(
-            "About",
-            "Album Detective\n\n"
-            "Scans your local library read-only, compares against online collections, and exports albums/artists not found locally.",
+        dialog = tk.Toplevel(self)
+        dialog.title("About")
+        dialog.transient(self)
+        dialog.grab_set()
+        dialog.geometry("560x520")
+        dialog.minsize(520, 460)
+
+        frame = ttk.Frame(dialog, padding=12)
+        frame.pack(fill=tk.BOTH, expand=True)
+
+        ttk.Label(frame, text="About", font=("TkDefaultFont", 14, "bold")).pack(anchor="center")
+
+        avatar_label = ttk.Label(frame, text="Loading profile image...")
+        avatar_label.pack(anchor="center", pady=(10, 6))
+
+        title_label = ttk.Label(frame, text="Album Detective", font=("TkDefaultFont", 12, "bold"))
+        title_label.pack(anchor="center", pady=(0, 4))
+
+        summary_label = ttk.Label(
+            frame,
+            text="Loading developer and repository details...",
+            justify="center",
+            wraplength=500,
         )
+        summary_label.pack(anchor="center", pady=(0, 10))
+
+        links_row = ttk.Frame(frame)
+        links_row.pack(fill=tk.X, pady=(0, 10))
+
+        profile_link = tk.Label(
+            links_row,
+            text="Developer Profile",
+            fg="#4ea3ff",
+            cursor="hand2",
+        )
+        profile_link.pack(side=tk.LEFT, padx=(0, 16))
+        profile_link.bind("<Button-1>", lambda _e: webbrowser.open(GITHUB_PROFILE_URL))
+
+        repo_link = tk.Label(
+            links_row,
+            text="Repository",
+            fg="#4ea3ff",
+            cursor="hand2",
+        )
+        repo_link.pack(side=tk.LEFT)
+        repo_link.bind("<Button-1>", lambda _e: webbrowser.open(GITHUB_REPO_URL))
+
+        info_box = tk.Text(frame, height=14, wrap=tk.WORD)
+        info_box.pack(fill=tk.BOTH, expand=True)
+        info_box.insert(
+            "1.0",
+            "Fetching live details from GitHub...\n"
+            f"Profile: {GITHUB_PROFILE_URL}\n"
+            f"Repository: {GITHUB_REPO_URL}\n",
+        )
+        info_box.configure(state=tk.DISABLED)
+
+        ttk.Button(frame, text="Close", command=dialog.destroy).pack(anchor="e", pady=(10, 0))
+
+        def _fetch_json(url: str) -> dict:
+            request = Request(url, headers={"Accept": "application/vnd.github+json", "User-Agent": "album-detective"})
+            with urlopen(request, timeout=10) as response:
+                payload = response.read().decode("utf-8", errors="replace")
+            data = json.loads(payload)
+            return data if isinstance(data, dict) else {}
+
+        def _download_avatar(avatar_url: str) -> Path | None:
+            if not avatar_url:
+                return None
+            cache_dir = self.paths.root_dir / "cache"
+            cache_dir.mkdir(parents=True, exist_ok=True)
+            avatar_path = cache_dir / "about_avatar_cpntodd.png"
+            try:
+                urlretrieve(avatar_url, avatar_path)
+                return avatar_path
+            except Exception:
+                return None
+
+        def _populate_about() -> None:
+            try:
+                profile = _fetch_json(GITHUB_PROFILE_API)
+                repo = _fetch_json(GITHUB_REPO_API)
+                avatar_path = _download_avatar(str(profile.get("avatar_url") or ""))
+
+                name = str(profile.get("name") or profile.get("login") or "cpntodd")
+                bio = str(profile.get("bio") or "")
+                public_repos = int(profile.get("public_repos") or 0)
+                followers = int(profile.get("followers") or 0)
+                following = int(profile.get("following") or 0)
+                contact_blog = str(profile.get("blog") or "")
+                contact_email = str(profile.get("email") or "")
+
+                repo_name = str(repo.get("full_name") or "cpntodd/album-detective")
+                repo_desc = str(repo.get("description") or "")
+                stars = int(repo.get("stargazers_count") or 0)
+                forks = int(repo.get("forks_count") or 0)
+                issues = int(repo.get("open_issues_count") or 0)
+                language = str(repo.get("language") or "Unknown")
+
+                detail_lines = [
+                    f"Developer: {name}",
+                    f"Followers: {followers} | Following: {following} | Public repos: {public_repos}",
+                    f"Contact page: {GITHUB_PROFILE_URL}",
+                ]
+                if contact_blog:
+                    detail_lines.append(f"Website: {contact_blog}")
+                if contact_email:
+                    detail_lines.append(f"Email: {contact_email}")
+
+                detail_lines.extend(
+                    [
+                        "",
+                        f"Repository: {repo_name}",
+                        f"Description: {repo_desc or 'N/A'}",
+                        f"Language: {language}",
+                        f"Stars: {stars} | Forks: {forks} | Open issues: {issues}",
+                        f"Repo link: {GITHUB_REPO_URL}",
+                    ]
+                )
+
+                def _apply_ui() -> None:
+                    summary = bio or "Desktop app for collectors to compare local library vs Spotify/Jellyfin."
+                    summary_label.configure(text=summary)
+
+                    if avatar_path and avatar_path.exists():
+                        try:
+                            image = tk.PhotoImage(file=str(avatar_path))
+                            avatar_label.configure(image=image, text="")
+                            avatar_label.image = image
+                        except Exception:
+                            avatar_label.configure(text="Profile image unavailable")
+                    else:
+                        avatar_label.configure(text="Profile image unavailable")
+
+                    info_box.configure(state=tk.NORMAL)
+                    info_box.delete("1.0", tk.END)
+                    info_box.insert("1.0", "\n".join(detail_lines))
+                    info_box.configure(state=tk.DISABLED)
+
+                self.after(0, _apply_ui)
+            except (HTTPError, URLError, TimeoutError, ValueError, OSError) as exc:
+                self.logger.warning("About dialog live metadata unavailable: %s", exc)
+
+                def _apply_fallback() -> None:
+                    summary_label.configure(
+                        text="Album Detective\nLocal library comparison and metadata tooling."
+                    )
+                    avatar_label.configure(text="Live profile image unavailable")
+                    info_box.configure(state=tk.NORMAL)
+                    info_box.delete("1.0", tk.END)
+                    info_box.insert(
+                        "1.0",
+                        "Developer info (offline fallback):\n"
+                        f"Profile: {GITHUB_PROFILE_URL}\n"
+                        f"Repository: {GITHUB_REPO_URL}\n"
+                        "\nBasic information is loaded dynamically when network access is available.",
+                    )
+                    info_box.configure(state=tk.DISABLED)
+
+                self.after(0, _apply_fallback)
+
+        threading.Thread(target=_populate_about, daemon=True).start()
 
     def verify_genres(self) -> None:
         if self._worker_thread and self._worker_thread.is_alive():
