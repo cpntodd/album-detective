@@ -18,7 +18,7 @@ Output/
 /build/*
 !/build/compare.spec
 
-# AppImage extraction leftovers
+# Packaging extraction leftovers
 squashfs-root/
 
 # OS/editor noise

@@ -188,25 +188,16 @@ Theme styling is applied across the app UI elements, including menu bars, button
 
 ## Packaging
 
-### Build Linux AppImage (Debian)
-
-**System Requirements:** `python3-tk` must be installed before building.
+### Build Linux .deb (Debian/Ubuntu)
 
 ```bash
-# Install tkinter (required for GUI bundling)
-sudo apt-get update
-sudo apt-get install -y python3-tk
-
-# Build the AppImage
 cd /media/share/Projects/album\ detective
-./scripts/linux/build_appimage.sh
+./scripts/linux/build_deb.sh
 ```
 
 Artifacts:
 
-- dist/linux/Music-Compare-x86_64.AppImage
-
-**Troubleshooting:** If the AppImage fails with `ModuleNotFoundError: No module named 'tkinter'`, see [APPIMAGE_SETUP.md](APPIMAGE_SETUP.md) for detailed setup instructions.
+- dist/linux/album-detective_<version>_amd64.deb
 - dist/linux/compare/ (PyInstaller folder used for packaging)
 
 ### Build Windows EXE (Contributor workflow)

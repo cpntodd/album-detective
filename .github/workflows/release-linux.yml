@@ -38,12 +38,7 @@ jobs:
         shell: bash
         run: |
           sudo apt-get update
-          sudo apt-get install -y libfuse2 desktop-file-utils
-
-      - name: Build AppImage
-        shell: bash
-        run: |
-          bash scripts/linux/build_appimage.sh
+          sudo apt-get install -y desktop-file-utils
 
       - name: Build .deb package
         shell: bash
@@ -63,6 +58,5 @@ jobs:
         with:
           tag_name: ${{ steps.meta.outputs.tag }}
           files: |
-            dist/linux/Music-Compare-x86_64.AppImage
             dist/linux/album-detective_${{ steps.meta.outputs.version }}_amd64.deb
           fail_on_unmatched_files: true

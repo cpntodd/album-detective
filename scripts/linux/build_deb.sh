@@ -4,7 +4,7 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$ROOT_DIR"
 
-VERSION="${1:-0.0.3}"
+VERSION="${1:-0.0.4}"
 ARCH="amd64"
 PKG_NAME="album-detective"
 APP_NAME="compare"
@@ -53,6 +53,7 @@ Type=Application
 Name=Album Detective
 Exec=$PKG_NAME
 Icon=$PKG_NAME
+StartupWMClass=album-detective
 Categories=AudioVideo;Utility;
 Terminal=false
 EOF
