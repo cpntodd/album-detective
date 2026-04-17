@@ -1107,16 +1107,19 @@ class MusicCompareApp(tk.Tk):
         dialog.title("About")
         dialog.transient(self)
         dialog.grab_set()
-        dialog.geometry("560x520")
-        dialog.minsize(520, 460)
+        dialog.geometry("560x540")
+        dialog.minsize(520, 480)
 
         frame = ttk.Frame(dialog, padding=12)
         frame.pack(fill=tk.BOTH, expand=True)
 
         ttk.Label(frame, text="About", font=("TkDefaultFont", 14, "bold")).pack(anchor="center")
 
-        avatar_label = ttk.Label(frame, text="Loading profile image...")
-        avatar_label.pack(anchor="center", pady=(10, 6))
+        # Avatar ellipse using Canvas
+        avatar_canvas = tk.Canvas(frame, width=96, height=96, highlightthickness=0, bg=frame.cget("background"))
+        avatar_canvas.pack(anchor="center", pady=(10, 6))
+        avatar_ellipse = avatar_canvas.create_oval(4, 4, 92, 92, fill="#222", outline="#888", width=2)
+        avatar_img_id = None
 
         title_label = ttk.Label(frame, text="Album Detective", font=("TkDefaultFont", 12, "bold"))
         title_label.pack(anchor="center", pady=(0, 4))
@@ -1137,6 +1140,11 @@ class MusicCompareApp(tk.Tk):
             text="Developer Profile",
             fg="#4ea3ff",
             cursor="hand2",
+            font=("TkDefaultFont", 10, "bold"),
+            relief="groove",
+            bd=2,
+            padx=8,
+            pady=2,
         )
         profile_link.pack(side=tk.LEFT, padx=(0, 16))
         profile_link.bind("<Button-1>", lambda _e: webbrowser.open(GITHUB_PROFILE_URL))
@@ -1146,6 +1154,11 @@ class MusicCompareApp(tk.Tk):
             text="Repository",
             fg="#4ea3ff",
             cursor="hand2",
+            font=("TkDefaultFont", 10, "bold"),
+            relief="groove",
+            bd=2,
+            padx=8,
+            pady=2,
         )
         repo_link.pack(side=tk.LEFT)
         repo_link.bind("<Button-1>", lambda _e: webbrowser.open(GITHUB_REPO_URL))
@@ -1169,25 +1182,52 @@ class MusicCompareApp(tk.Tk):
             data = json.loads(payload)
             return data if isinstance(data, dict) else {}
 
-        def _download_avatar(avatar_url: str) -> Path | None:
-            if not avatar_url:
-                return None
+        def _download_avatar_github(username: str) -> Path | None:
+            # Use direct github.com/<username>.png for robust fallback
+            avatar_url = f"https://github.com/{username}.png"
             cache_dir = self.paths.root_dir / "cache"
             cache_dir.mkdir(parents=True, exist_ok=True)
-            avatar_path = cache_dir / "about_avatar_cpntodd.png"
+            avatar_path = cache_dir / f"about_avatar_{username}.png"
             try:
                 urlretrieve(avatar_url, avatar_path)
                 return avatar_path
             except Exception:
                 return None
 
+        def _get_fallback_icon() -> Path:
+            # Use local icon as fallback
+            return Path(__file__).parent.parent.parent / "images" / "icon.png"
+
+        def _draw_avatar(img_path: Path | None):
+            nonlocal avatar_img_id
+            avatar_canvas.delete("avatar_img")
+            if img_path and img_path.exists():
+                try:
+                    from PIL import Image, ImageTk
+                    img = Image.open(img_path).convert("RGBA").resize((88, 88), Image.LANCZOS)
+                    # Create ellipse mask
+                    mask = Image.new("L", (88, 88), 0)
+                    from PIL import ImageDraw
+                    ImageDraw.Draw(mask).ellipse((0, 0, 88, 88), fill=255)
+                    img.putalpha(mask)
+                    tkimg = ImageTk.PhotoImage(img)
+                    avatar_img_id = avatar_canvas.create_image(48, 48, image=tkimg, tags="avatar_img")
+                    avatar_canvas.image = tkimg
+                except Exception:
+                    avatar_canvas.create_text(48, 48, text="?", fill="#ccc", font=("TkDefaultFont", 36, "bold"), tags="avatar_img")
+            else:
+                avatar_canvas.create_text(48, 48, text="?", fill="#ccc", font=("TkDefaultFont", 36, "bold"), tags="avatar_img")
+
         def _populate_about() -> None:
             try:
                 profile = _fetch_json(GITHUB_PROFILE_API)
                 repo = _fetch_json(GITHUB_REPO_API)
-                avatar_path = _download_avatar(str(profile.get("avatar_url") or ""))
+                username = str(profile.get("login") or "cpntodd")
+                avatar_path = _download_avatar_github(username)
+                if not avatar_path or not avatar_path.exists():
+                    avatar_path = _get_fallback_icon()
 
-                name = str(profile.get("name") or profile.get("login") or "cpntodd")
+                name = str(profile.get("name") or username)
                 bio = str(profile.get("bio") or "")
                 public_repos = int(profile.get("public_repos") or 0)
                 followers = int(profile.get("followers") or 0)
@@ -1226,17 +1266,7 @@ class MusicCompareApp(tk.Tk):
                 def _apply_ui() -> None:
                     summary = bio or "Desktop app for collectors to compare local library vs Spotify/Jellyfin."
                     summary_label.configure(text=summary)
-
-                    if avatar_path and avatar_path.exists():
-                        try:
-                            image = tk.PhotoImage(file=str(avatar_path))
-                            avatar_label.configure(image=image, text="")
-                            avatar_label.image = image
-                        except Exception:
-                            avatar_label.configure(text="Profile image unavailable")
-                    else:
-                        avatar_label.configure(text="Profile image unavailable")
-
+                    _draw_avatar(avatar_path)
                     info_box.configure(state=tk.NORMAL)
                     info_box.delete("1.0", tk.END)
                     info_box.insert("1.0", "\n".join(detail_lines))
@@ -1250,7 +1280,7 @@ class MusicCompareApp(tk.Tk):
                     summary_label.configure(
                         text="Album Detective\nLocal library comparison and metadata tooling."
                     )
-                    avatar_label.configure(text="Live profile image unavailable")
+                    _draw_avatar(_get_fallback_icon())
                     info_box.configure(state=tk.NORMAL)
                     info_box.delete("1.0", tk.END)
                     info_box.insert(
@@ -1263,6 +1293,14 @@ class MusicCompareApp(tk.Tk):
                     info_box.configure(state=tk.DISABLED)
 
                 self.after(0, _apply_fallback)
+
+        # Try to import PIL for ellipse masking, else fallback to text avatar
+        try:
+            import PIL
+        except ImportError:
+            def _draw_avatar(_):
+                avatar_canvas.delete("avatar_img")
+                avatar_canvas.create_text(48, 48, text="?", fill="#ccc", font=("TkDefaultFont", 36, "bold"), tags="avatar_img")
 
         threading.Thread(target=_populate_about, daemon=True).start()
 

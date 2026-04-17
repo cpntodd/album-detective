@@ -4,13 +4,18 @@ Update VERSION for each release:
 - Increment PATCH (0.0.X) for each major codebase update
 """
 
-__version__ = "0.0.5"
+__version__ = "0.0.6"
 __title__ = "Album Detective"
 __description__ = "Desktop app for collectors to cross-reference local music against Spotify and Jellyfin data"
 __author__ = "cpntodd"
 __license__ = "MIT"
 
 # Version history:
+# 0.0.6 (April 17, 2026):
+#   - About dialog avatar always shown in ellipse (Canvas)
+#   - Avatar fetched from github.com/<username>.png, fallback to local icon
+#   - UI polish: ellipse always shown, robust fallback, PIL ellipse masking
+#
 # 0.0.5 (April 17, 2026):
 #   - Replaced static About popup with dynamic GitHub-backed About dialog
 #   - Added clickable developer profile and repository links
