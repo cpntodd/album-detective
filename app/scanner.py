@@ -5,8 +5,9 @@ import os
 from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Callable
+from typing import Callable, Optional
 
+from .change_tracker import LibraryChangeTracker
 from .library_indexer import discover_audio_files, extract_audio_metadata
 from .models import TrackRecord
 from .normalization import clean_text
@@ -114,7 +115,24 @@ def scan_music_folder(
     use_cache: bool = True,
     max_workers: int | None = None,
     scan_profile: str = "auto",
+    use_change_tracking: bool = True,
 ) -> list[TrackRecord]:
+    """Scan music folder with optional change tracking for delta scans.
+    
+    Args:
+        root_path: Path to music folder
+        on_progress: Progress callback
+        on_diagnostic: Diagnostic callback
+        should_cancel: Cancellation callback
+        cache_file: Cache file path
+        use_cache: If True, use file-level cache
+        max_workers: Max worker threads
+        scan_profile: Scan profile ("auto", "local", "network")
+        use_change_tracking: If True, only scan changed files (delta scan)
+    
+    Returns:
+        List of TrackRecord objects
+    """
     root = Path(root_path)
     if not root.exists() or not root.is_dir():
         raise FileNotFoundError(f"Music folder does not exist or is not a directory: {root_path}")
@@ -134,7 +152,33 @@ def scan_music_folder(
         on_progress(0, total_files, "Preparing scan...")
     if on_diagnostic:
         cache_state = "enabled" if (use_cache and cache_file is not None) else "disabled"
-        on_diagnostic(f"index mode: cache={cache_state}, profile={scan_profile}")
+        delta_mode = "enabled" if use_change_tracking else "disabled"
+        on_diagnostic(f"index mode: cache={cache_state}, delta={delta_mode}, profile={scan_profile}")
+
+    # Initialize change tracker for delta scanning
+    change_tracker = None
+    candidates_to_scan = all_audio_files
+    
+    if use_change_tracking:
+        try:
+            change_tracker = LibraryChangeTracker(root_path=root)
+            file_paths = [c.path for c in all_audio_files]
+            changes = change_tracker.detect_changes(file_paths)
+            
+            added = set(str(p) for p in changes.get("added", []))
+            modified = set(str(p) for p in changes.get("modified", []))
+            removed = set(str(p) for p in changes.get("removed", []))
+            
+            # Only need to scan added/modified files; removed are naturally not in current list
+            to_scan_paths = added | modified
+            candidates_to_scan = [c for c in all_audio_files if str(c.path) in to_scan_paths]
+            
+            if on_diagnostic:
+                on_diagnostic(f"delta scan: +{len(added)} ~{len(modified)} -{len(removed)}")
+        except Exception as exc:
+            if on_diagnostic:
+                on_diagnostic(f"delta tracking disabled: {exc}")
+            change_tracker = None
 
     cache_data = {"entries": {}}
     cache_entries: dict[str, dict] = {}
@@ -150,7 +194,7 @@ def scan_music_folder(
     completed = 0
     cached_hits = 0
 
-    for candidate in all_audio_files:
+    for candidate in candidates_to_scan:
         if should_cancel and should_cancel():
             raise ScanCancelled("Scan cancelled by user.")
 
@@ -237,6 +281,28 @@ def scan_music_folder(
     if cache_file is not None:
         cache_data["entries"] = fresh_cache_entries
         _save_cache(cache_file, cache_data)
+
+    # Save change tracker snapshot for next session
+    if change_tracker is not None:
+        try:
+            change_tracker.save_snapshot()
+        except Exception as exc:
+            if on_diagnostic:
+                on_diagnostic(f"Failed to save change tracking snapshot: {exc}")
+
+    # For delta scan mode, also include cached records from non-changed files
+    if use_change_tracking and change_tracker is not None:
+        for candidate in all_audio_files:
+            path_key = str(candidate.path)
+            if path_key not in records_by_path:
+                entry = cache_entries.get(path_key)
+                if entry and entry.get("mtime_ns") == candidate.mtime_ns and entry.get("size") == candidate.size:
+                    rec = TrackRecord(
+                        track_name=clean_text(entry.get("track_name", candidate.path.stem)),
+                        artist=clean_text(entry.get("artist", "")),
+                        album=clean_text(entry.get("album", "")),
+                    )
+                    records_by_path[path_key] = rec
 
     records: list[TrackRecord] = []
     for candidate in all_audio_files:
