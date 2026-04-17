@@ -33,9 +33,12 @@ mkdir -p "$PKG_ROOT/opt/$PKG_NAME"
 mkdir -p "$PKG_ROOT/usr/bin"
 mkdir -p "$PKG_ROOT/usr/share/applications"
 mkdir -p "$PKG_ROOT/usr/share/icons/hicolor/512x512/apps"
+mkdir -p "$PKG_ROOT/usr/share/pixmaps"
 
 cp -r "$PYI_DIST_DIR/$APP_NAME" "$PKG_ROOT/opt/$PKG_NAME/$APP_NAME"
 cp "$ROOT_DIR/images/icon.png" "$PKG_ROOT/usr/share/icons/hicolor/512x512/apps/$PKG_NAME.png"
+# Also install icon in pixmaps as fallback for icon lookup
+cp "$ROOT_DIR/images/icon.png" "$PKG_ROOT/usr/share/pixmaps/$PKG_NAME.png"
 
 cat > "$PKG_ROOT/usr/bin/$PKG_NAME" << 'EOF'
 #!/usr/bin/env bash
@@ -68,6 +71,44 @@ Installed-Size: $INSTALLED_SIZE_KB
 Description: Album Detective desktop app
  Cross-reference local music collections against Spotify/Jellyfin and review missing albums.
 EOF
+
+# Create postinst script to update icon cache after installation
+cat > "$PKG_ROOT/DEBIAN/postinst" << 'EOF'
+#!/bin/bash
+set -e
+
+# Update icon caches
+if command -v update-icon-caches &> /dev/null; then
+    update-icon-caches /usr/share/icons/hicolor 2>/dev/null || true
+fi
+
+# Update desktop database for mime types and icons
+if command -v update-desktop-database &> /dev/null; then
+    update-desktop-database /usr/share/applications 2>/dev/null || true
+fi
+
+exit 0
+EOF
+chmod 755 "$PKG_ROOT/DEBIAN/postinst"
+
+# Create postrm script to clean up icon cache after removal
+cat > "$PKG_ROOT/DEBIAN/postrm" << 'EOF'
+#!/bin/bash
+set -e
+
+# Update icon caches after removal
+if command -v update-icon-caches &> /dev/null; then
+    update-icon-caches /usr/share/icons/hicolor 2>/dev/null || true
+fi
+
+# Update desktop database
+if command -v update-desktop-database &> /dev/null; then
+    update-desktop-database /usr/share/applications 2>/dev/null || true
+fi
+
+exit 0
+EOF
+chmod 755 "$PKG_ROOT/DEBIAN/postrm"
 
 DEB_PATH="$DIST_DIR/${PKG_NAME}_${VERSION}_${ARCH}.deb"
 dpkg-deb --root-owner-group --build "$PKG_ROOT" "$DEB_PATH"
