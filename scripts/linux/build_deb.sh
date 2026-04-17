@@ -4,7 +4,7 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$ROOT_DIR"
 
-VERSION="${1:-0.0.2}"
+VERSION="${1:-0.0.3}"
 ARCH="amd64"
 PKG_NAME="album-detective"
 APP_NAME="compare"

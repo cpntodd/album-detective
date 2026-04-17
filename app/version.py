@@ -4,13 +4,17 @@ Update VERSION for each release:
 - Increment PATCH (0.0.X) for each major codebase update
 """
 
-__version__ = "0.0.2"
+__version__ = "0.0.3"
 __title__ = "Album Detective"
 __description__ = "Desktop app for collectors to cross-reference local music against Spotify and Jellyfin data"
 __author__ = "cpntodd"
 __license__ = "MIT"
 
 # Version history:
+# 0.0.3 (April 17, 2026):
+#   - Tools panel UI updated to remove vertical tabs
+#   - Tool buttons now shown in descending alphabetical order
+#
 # 0.0.2 (April 17, 2026):
 #   - Persistent genre verification server with batching
 #   - Three-level caching (memory, disk, report-level)
