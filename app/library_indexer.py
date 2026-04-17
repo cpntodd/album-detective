@@ -10,6 +10,7 @@ from mutagen import File as MutagenFile
 from .normalization import clean_text
 
 CancelCallback = Callable[[], bool]
+DiagnosticCallback = Callable[[str], None]
 
 AUDIO_EXTENSIONS = {
     ".mp3",
@@ -79,8 +80,25 @@ def discover_audio_files(
     should_cancel: CancelCallback | None = None,
     cancel_exception: type[Exception] = RuntimeError,
     cancel_message: str = "Scan cancelled",
+    on_diagnostic: DiagnosticCallback | None = None,
+    visited_inodes: set[int] | None = None,
 ) -> list[AudioFileCandidate]:
+    """Discover audio files with inode-based cycle detection and diagnostic callbacks.
+    
+    Optimized for network FS: uses inode tracking to prevent symlink loops,
+    tracks cycles with diagnostic events.
+    
+    Args:
+        root: Root directory to scan.
+        should_cancel: Callback to check for cancellation.
+        cancel_exception: Exception type to raise on cancellation.
+        cancel_message: Message for cancellation exception.
+        on_diagnostic: Optional callback for scan diagnostics (cycle detection, symlinks).
+        visited_inodes: Set of visited inodes for cycle detection (prevents symlink loops).
+    """
     files: list[AudioFileCandidate] = []
+    if visited_inodes is None:
+        visited_inodes = set()
 
     # os.walk uses scandir internally and is efficient on large trees.
     for dirpath, _, filenames in os.walk(root):
@@ -91,6 +109,20 @@ def discover_audio_files(
         )
 
         base = Path(dirpath)
+        
+        # Check for symlink cycles using inode tracking (network-safe).
+        try:
+            dir_stat = base.stat()
+            dir_inode = dir_stat.st_ino
+            if dir_inode in visited_inodes:
+                if on_diagnostic:
+                    on_diagnostic(f"cycle-detected: inode={dir_inode} path={dirpath}")
+                continue
+            visited_inodes.add(dir_inode)
+        except OSError:
+            # Permission or other stat error; skip directory.
+            continue
+
         for name in filenames:
             if Path(name).suffix.lower() not in AUDIO_EXTENSIONS:
                 continue
@@ -107,6 +139,11 @@ def discover_audio_files(
 
 
 def extract_audio_metadata(file_path: Path) -> AudioMetadata:
+    """Extract audio metadata with fallback to path inference.
+    
+    Optimized for network FS: reads file metadata once, suitable for batch
+    parallel execution via thread pool (I/O-bound, not CPU-bound).
+    """
     track_name = clean_text(file_path.stem)
     artist = ""
     album = ""

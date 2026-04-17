@@ -135,6 +135,7 @@ def _extract_album_genre_map(
         should_cancel=should_cancel,
         cancel_exception=GenreVerificationCancelled,
         cancel_message="Genre verification cancelled by user.",
+        on_diagnostic=None,
     )
 
     total = len(candidates)

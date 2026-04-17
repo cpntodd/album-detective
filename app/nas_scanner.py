@@ -63,6 +63,7 @@ def scan_nas_cached(
             should_cancel=should_cancel,
             cancel_exception=RuntimeError,
             cancel_message="Cancelled",
+            on_diagnostic=None,
         )
     ]
 

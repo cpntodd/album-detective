@@ -94,12 +94,14 @@ def _select_workers(root: Path, scan_profile: str, requested_workers: int | None
     profile = (scan_profile or "auto").strip().lower()
 
     if profile == "network":
-        return min(6, max(2, cpu // 2))
+        # Network I/O benefits from 8-16 threads for metadata extraction (I/O-bound).
+        return min(16, max(8, cpu * 2))
     if profile == "local":
         return min(24, max(4, cpu * 2))
 
     if _is_network_fs_linux(root):
-        return min(6, max(2, cpu // 2))
+        # Auto-detected network FS: use network thread settings for parallelism.
+        return min(16, max(8, cpu * 2))
     return min(24, max(4, cpu * 2))
 
 
@@ -124,6 +126,7 @@ def scan_music_folder(
             should_cancel=should_cancel,
             cancel_exception=ScanCancelled,
             cancel_message="Scan cancelled by user.",
+            on_diagnostic=on_diagnostic,
         )
     ]
     total_files = len(all_audio_files)
